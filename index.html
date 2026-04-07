@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Don't Break the Chain</title>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{
+            --bg:#0d1117;--surface:#161b22;--surface2:#1c2333;--border:#30363d;
+            --text:#e6edf3;--text-muted:#7d8590;--accent:#39d353;--accent-dim:#0e4429;
+            --today:#f0883e;--fire:#f97316;--fire-glow:rgba(249,115,22,.25);
+            --radius:10px;
+        }
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;min-height:100dvh}
+
+        /* ── Setup & Login Screens ── */
+        .screen{display:none;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding:20px}
+        .screen.active{display:flex}
+        .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px;max-width:520px;width:100%}
+        .card h1{font-size:1.8rem;margin-bottom:8px}
+        .card p{color:var(--text-muted);line-height:1.6;margin-bottom:20px}
+        .card .step{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+        .card .step-num{display:inline-block;background:var(--accent-dim);color:var(--accent);font-weight:700;width:28px;height:28px;border-radius:50%;text-align:center;line-height:28px;font-size:.85rem;margin-right:10px}
+        .card a{color:var(--accent);text-decoration:none}
+        .card a:hover{text-decoration:underline}
+        label{display:block;font-size:.9rem;color:var(--text-muted);margin-bottom:6px;margin-top:16px}
+        input,textarea{width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem;font-family:inherit}
+        input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+        textarea{resize:vertical;min-height:80px;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.85rem}
+        .btn{display:inline-block;padding:12px 28px;background:var(--accent);color:var(--bg);border:none;border-radius:var(--radius);font-size:1rem;font-weight:600;cursor:pointer;margin-top:20px;transition:opacity .2s}
+        .btn:hover{opacity:.9}
+        .btn:disabled{opacity:.4;cursor:not-allowed}
+        .btn-secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+        .error-msg{color:#f85149;font-size:.85rem;margin-top:8px;display:none}
+
+        /* ── Main App ── */
+        .app{display:none;flex-direction:column;min-height:100vh;min-height:100dvh}
+        .app.active{display:flex}
+
+        /* Header / Stats */
+        .header{padding:24px 24px 0;max-width:960px;width:100%;margin:0 auto}
+        .title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+        .title-row h1{font-size:1.4rem;font-weight:600}
+        .title-row .actions{display:flex;gap:8px}
+        .icon-btn{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:.85rem;transition:all .2s}
+        .icon-btn:hover{border-color:var(--text-muted);color:var(--text)}
+
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+        .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center}
+        .stat.streak{border-color:var(--fire);box-shadow:0 0 20px var(--fire-glow)}
+        .stat-value{font-size:2rem;font-weight:700;line-height:1.2}
+        .stat.streak .stat-value{color:var(--fire)}
+        .stat-label{font-size:.8rem;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+
+        /* Year nav */
+        .year-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:20px}
+        .year-nav button{background:none;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:1rem;transition:all .2s}
+        .year-nav button:hover{border-color:var(--text-muted)}
+        .year-nav .year{font-size:1.3rem;font-weight:600;min-width:60px;text-align:center}
+
+        /* Calendar Grid */
+        .calendar{max-width:960px;width:100%;margin:0 auto;padding:0 24px 40px;flex:1}
+        .months-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+        .month{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+        .month-name{font-size:.85rem;font-weight:600;margin-bottom:8px;text-align:center;color:var(--text-muted)}
+        .dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px}
+        .dow{font-size:.6rem;text-align:center;color:var(--text-muted);text-transform:uppercase;padding:2px 0}
+        .days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+        .day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:.7rem;border-radius:3px;cursor:pointer;position:relative;transition:all .15s;color:var(--text-muted);background:var(--bg)}
+        .day:hover{outline:1px solid var(--text-muted)}
+        .day.empty{background:transparent;cursor:default}
+        .day.empty:hover{outline:none}
+        .day.future{opacity:.3;cursor:not-allowed}
+        .day.future:hover{outline:none}
+        .day.marked{background:var(--accent);color:var(--bg);font-weight:700}
+        .day.today{outline:2px solid var(--today);outline-offset:-1px;z-index:1}
+        .day.today.marked{outline-color:var(--today)}
+
+        /* Celebration */
+        .celebrate{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:3rem;pointer-events:none;z-index:999;animation:pop .6s ease-out forwards}
+        @keyframes pop{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}40%{transform:translate(-50%,-50%) scale(1.3)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5) translateY(-40px)}}
+
+        /* Share modal */
+        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:20px}
+        .modal-overlay.active{display:flex}
+        .modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:480px;width:100%}
+        .modal h2{margin-bottom:12px}
+        .modal p{color:var(--text-muted);margin-bottom:16px;line-height:1.5}
+        .copy-row{display:flex;gap:8px}
+        .copy-row input{flex:1}
+        .copy-row button{white-space:nowrap}
+
+        /* Responsive */
+        @media(max-width:900px){
+            .months-grid{grid-template-columns:repeat(3,1fr)}
+            .stats{grid-template-columns:repeat(2,1fr)}
+        }
+        @media(max-width:600px){
+            .months-grid{grid-template-columns:repeat(2,1fr)}
+            .card{padding:24px}
+            .header{padding:16px 16px 0}
+            .calendar{padding:0 16px 24px}
+            .stat-value{font-size:1.5rem}
+        }
+        @media(max-width:400px){
+            .months-grid{grid-template-columns:1fr}
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════ SETUP SCREEN ═══════════════ -->
+<div id="setupScreen" class="screen">
+    <div class="card">
+        <h1>Set Up Cloud Sync</h1>
+        <p>To sync your writing streak across all your devices, you'll need a free Firebase project. It takes about 3 minutes.</p>
+
+        <div class="step">
+            <span class="step-num">1</span>
+            Go to <a href="https://console.firebase.google.com/" target="_blank">Firebase Console</a> and create a new project (free tier).
+        </div>
+        <div class="step">
+            <span class="step-num">2</span>
+            In your project, go to <strong>Build &rarr; Realtime Database</strong> and click <em>Create Database</em>. Choose any location, then select <strong>"Start in test mode"</strong>.
+        </div>
+        <div class="step">
+            <span class="step-num">3</span>
+            Go to <strong>Project Settings</strong> (gear icon) &rarr; <strong>General</strong> &rarr; scroll to <em>"Your apps"</em> &rarr; click the <strong>Web (&lt;/&gt;)</strong> icon. Register an app (any name), then copy the <code>firebaseConfig</code> object.
+        </div>
+
+        <label for="configInput">Paste your Firebase config here:</label>
+        <textarea id="configInput" placeholder='{
+  apiKey: "AIza...",
+  authDomain: "my-project.firebaseapp.com",
+  databaseURL: "https://my-project-default-rtdb...",
+  projectId: "my-project",
+  ...
+}'></textarea>
+        <div id="configError" class="error-msg"></div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <button class="btn" onclick="saveConfig()">Continue</button>
+            <button class="btn btn-secondary" onclick="skipSetup()">Skip &mdash; use offline only</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ LOGIN SCREEN ═══════════════ -->
+<div id="loginScreen" class="screen">
+    <div class="card" style="text-align:center">
+        <h1 style="font-size:2.2rem;margin-bottom:4px">Don't Break the Chain</h1>
+        <p style="font-size:1.05rem">Track your daily writing streak</p>
+
+        <label for="passphraseInput" style="text-align:left">Your secret passphrase</label>
+        <input type="password" id="passphraseInput" placeholder="Enter a memorable passphrase..." onkeydown="if(event.key==='Enter')login()">
+        <p style="font-size:.8rem;margin-top:8px;margin-bottom:0">Use the same passphrase on every device to keep your data in sync. Don't lose it &mdash; there's no recovery.</p>
+        <div id="loginError" class="error-msg"></div>
+        <button class="btn" onclick="login()" style="width:100%">Start Tracking</button>
+    </div>
+</div>
+
+<!-- ═══════════════ MAIN APP ═══════════════ -->
+<div id="app" class="app">
+    <div class="header">
+        <div class="title-row">
+            <h1>Don't Break the Chain</h1>
+            <div class="actions">
+                <button class="icon-btn" onclick="showShareModal()" title="Share link for other devices">&#128279; Share Link</button>
+                <button class="icon-btn" onclick="logout()" title="Switch account">&#9099; Logout</button>
+            </div>
+        </div>
+        <div class="stats">
+            <div class="stat streak">
+                <div class="stat-value" id="currentStreak">0</div>
+                <div class="stat-label">Current Streak</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="longestStreak">0</div>
+                <div class="stat-label">Longest Streak</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="totalDays">0</div>
+                <div class="stat-label">Total Days</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="yearProgress">0%</div>
+                <div class="stat-label" id="yearProgressLabel">Year Progress</div>
+            </div>
+        </div>
+        <div class="year-nav">
+            <button onclick="changeYear(-1)">&larr;</button>
+            <span class="year" id="yearLabel">2026</span>
+            <button onclick="changeYear(1)">&rarr;</button>
+        </div>
+    </div>
+    <div class="calendar" id="calendarContainer"></div>
+</div>
+
+<!-- ═══════════════ SHARE MODAL ═══════════════ -->
+<div id="shareModal" class="modal-overlay" onclick="if(event.target===this)this.classList.remove('active')">
+    <div class="modal">
+        <h2>Set Up Another Device</h2>
+        <p>Open this link on your other device. It contains your Firebase config so you'll only need to enter your passphrase.</p>
+        <div class="copy-row">
+            <input type="text" id="shareUrl" readonly>
+            <button class="btn" onclick="copyShareUrl()" id="copyBtn">Copy</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ─── State ───
+let db = null;
+let userRef = null;
+let markedDays = {};       // { "2026-04-07": true, ... }
+let viewYear = new Date().getFullYear();
+let offlineMode = false;
+const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// ─── Utilities ───
+function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function dateStr(y, m, d) {
+    return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function parseDate(s) {
+    const [y,m,d] = s.split('-').map(Number);
+    return new Date(y, m-1, d);
+}
+
+function isFuture(s) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    return parseDate(s) > today;
+}
+
+function isToday(s) { return s === todayStr(); }
+
+async function sha256(text) {
+    const data = new TextEncoder().encode(text);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// ─── Config Handling ───
+function getConfig() {
+    const raw = localStorage.getItem('dbtc_firebase_config');
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+}
+
+function parseConfigInput(text) {
+    // Handle both JSON and JS object literal formats
+    let cleaned = text.trim();
+    // Replace single-line JS object keys without quotes
+    cleaned = cleaned.replace(/(\w+)\s*:/g, '"$1":');
+    // Remove trailing commas
+    cleaned = cleaned.replace(/,\s*}/g, '}');
+    // Ensure it's wrapped in braces
+    if (!cleaned.startsWith('{')) cleaned = '{' + cleaned + '}';
+    try {
+        const obj = JSON.parse(cleaned);
+        if (!obj.apiKey || !obj.databaseURL) throw new Error('Missing apiKey or databaseURL');
+        return obj;
+    } catch(e) {
+        throw new Error('Invalid config. Make sure you copied the full firebaseConfig object. (' + e.message + ')');
+    }
+}
+
+function saveConfig() {
+    const input = document.getElementById('configInput').value;
+    const errEl = document.getElementById('configError');
+    try {
+        const config = parseConfigInput(input);
+        localStorage.setItem('dbtc_firebase_config', JSON.stringify(config));
+        errEl.style.display = 'none';
+        initApp();
+    } catch(e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+    }
+}
+
+function skipSetup() {
+    offlineMode = true;
+    showScreen('login');
+}
+
+// ─── Screen Navigation ───
+function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('app').classList.remove('active');
+    if (name === 'app') {
+        document.getElementById('app').classList.add('active');
+    } else {
+        document.getElementById(name + 'Screen').classList.add('active');
+    }
+}
+
+// ─── Firebase Init ───
+function initFirebase(config) {
+    if (!firebase.apps.length) {
+        firebase.initializeApp(config);
+    }
+    db = firebase.database();
+}
+
+// ─── Login ───
+async function login() {
+    const passphrase = document.getElementById('passphraseInput').value.trim();
+    const errEl = document.getElementById('loginError');
+    if (!passphrase) {
+        errEl.textContent = 'Please enter a passphrase.';
+        errEl.style.display = 'block';
+        return;
+    }
+    const key = await sha256(passphrase);
+    localStorage.setItem('dbtc_user_key', key);
+    errEl.style.display = 'none';
+    startApp(key);
+}
+
+function logout() {
+    if (userRef) userRef.off();
+    localStorage.removeItem('dbtc_user_key');
+    markedDays = {};
+    showScreen('login');
+    document.getElementById('passphraseInput').value = '';
+}
+
+// ─── App Init Flow ───
+function initApp() {
+    // Check URL for config param
+    const hash = window.location.hash;
+    if (hash.startsWith('#config=')) {
+        try {
+            const encoded = hash.substring(8);
+            const config = JSON.parse(atob(encoded));
+            localStorage.setItem('dbtc_firebase_config', JSON.stringify(config));
+            window.location.hash = '';
+        } catch(e) { /* ignore bad hash */ }
+    }
+
+    const config = getConfig();
+    if (!config && !offlineMode) {
+        showScreen('setup');
+        return;
+    }
+
+    if (config) {
+        try { initFirebase(config); } catch(e) {
+            console.error('Firebase init failed:', e);
+            offlineMode = true;
+        }
+    }
+
+    // Check for saved login
+    const savedKey = localStorage.getItem('dbtc_user_key');
+    if (savedKey) {
+        startApp(savedKey);
+    } else {
+        showScreen('login');
+    }
+}
+
+function startApp(userKey) {
+    if (!offlineMode && db) {
+        userRef = db.ref('users/' + userKey + '/days');
+        userRef.on('value', snapshot => {
+            markedDays = snapshot.val() || {};
+            render();
+        });
+    } else {
+        // Offline mode: use localStorage
+        const saved = localStorage.getItem('dbtc_days_' + userKey);
+        markedDays = saved ? JSON.parse(saved) : {};
+        render();
+    }
+    showScreen('app');
+}
+
+// ─── Toggle Day ───
+function toggleDay(ds) {
+    if (isFuture(ds)) return;
+    const userKey = localStorage.getItem('dbtc_user_key');
+    if (!userKey) return;
+
+    const wasMarked = !!markedDays[ds];
+
+    if (wasMarked) {
+        delete markedDays[ds];
+    } else {
+        markedDays[ds] = true;
+    }
+
+    if (!offlineMode && userRef) {
+        if (wasMarked) {
+            userRef.child(ds).remove();
+        } else {
+            userRef.child(ds).set(true);
+        }
+    } else {
+        localStorage.setItem('dbtc_days_' + userKey, JSON.stringify(markedDays));
+    }
+
+    // Celebrate marking today
+    if (!wasMarked && isToday(ds)) celebrate();
+
+    render();
+}
+
+function celebrate() {
+    const el = document.createElement('div');
+    el.className = 'celebrate';
+    el.textContent = '\u2728\u270D\uFE0F\u2728';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 700);
+}
+
+// ─── Streak Calculation ───
+function calcStats() {
+    const allDays = Object.keys(markedDays).filter(k => markedDays[k]).sort();
+    const total = allDays.length;
+
+    if (total === 0) return { current: 0, longest: 0, total: 0 };
+
+    // Current streak: count back from today
+    let current = 0;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const check = new Date(today);
+
+    // If today isn't marked, start from yesterday
+    if (!markedDays[todayStr()]) {
+        check.setDate(check.getDate() - 1);
+    }
+
+    while (true) {
+        const ds = `${check.getFullYear()}-${String(check.getMonth()+1).padStart(2,'0')}-${String(check.getDate()).padStart(2,'0')}`;
+        if (markedDays[ds]) {
+            current++;
+            check.setDate(check.getDate() - 1);
+        } else {
+            break;
+        }
+    }
+
+    // Longest streak
+    let longest = 0, run = 0, prev = null;
+    for (const ds of allDays) {
+        const d = parseDate(ds);
+        if (prev) {
+            const diff = (d - prev) / 86400000;
+            if (diff === 1) { run++; } else { run = 1; }
+        } else { run = 1; }
+        if (run > longest) longest = run;
+        prev = d;
+    }
+
+    return { current, longest, total };
+}
+
+// ─── Render ───
+function render() {
+    const { current, longest, total } = calcStats();
+    document.getElementById('currentStreak').textContent = current;
+    document.getElementById('longestStreak').textContent = longest;
+    document.getElementById('totalDays').textContent = total;
+
+    // Year progress: days marked this viewYear / days elapsed this viewYear
+    const now = new Date();
+    const yearStart = new Date(viewYear, 0, 1);
+    const yearEnd = new Date(viewYear, 11, 31);
+    const refDate = (viewYear === now.getFullYear()) ? now : yearEnd;
+    const elapsed = Math.floor((refDate - yearStart) / 86400000) + 1;
+    const yearDays = Object.keys(markedDays).filter(k => markedDays[k] && k.startsWith(viewYear + '-')).length;
+    const pct = elapsed > 0 ? Math.round((yearDays / elapsed) * 100) : 0;
+    document.getElementById('yearProgress').textContent = pct + '%';
+    document.getElementById('yearProgressLabel').textContent = viewYear + ' Rate';
+    document.getElementById('yearLabel').textContent = viewYear;
+
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const container = document.getElementById('calendarContainer');
+    let html = '<div class="months-grid">';
+
+    for (let m = 0; m < 12; m++) {
+        const monthName = new Date(viewYear, m, 1).toLocaleDateString('en-US', { month: 'short' });
+        html += `<div class="month"><div class="month-name">${monthName}</div>`;
+        html += '<div class="dow-row">';
+        DOW.forEach(d => html += `<div class="dow">${d[0]}</div>`);
+        html += '</div><div class="days-grid">';
+
+        // First day of month (Monday=0 ... Sunday=6)
+        const firstDay = new Date(viewYear, m, 1).getDay();
+        const offset = (firstDay + 6) % 7; // shift so Monday=0
+        const daysInMonth = new Date(viewYear, m + 1, 0).getDate();
+
+        for (let i = 0; i < offset; i++) html += '<div class="day empty"></div>';
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const ds = dateStr(viewYear, m, d);
+            const classes = ['day'];
+            if (markedDays[ds]) classes.push('marked');
+            if (isToday(ds)) classes.push('today');
+            if (isFuture(ds)) classes.push('future');
+            html += `<div class="${classes.join(' ')}" onclick="toggleDay('${ds}')" title="${ds}">${d}</div>`;
+        }
+
+        html += '</div></div>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function changeYear(delta) {
+    viewYear += delta;
+    render();
+}
+
+// ─── Share ───
+function showShareModal() {
+    const config = getConfig();
+    if (!config) {
+        alert('Cloud sync is not configured. Share is only available with Firebase.');
+        return;
+    }
+    const encoded = btoa(JSON.stringify(config));
+    const base = window.location.origin + window.location.pathname;
+    document.getElementById('shareUrl').value = base + '#config=' + encoded;
+    document.getElementById('shareModal').classList.add('active');
+}
+
+function copyShareUrl() {
+    const input = document.getElementById('shareUrl');
+    input.select();
+    navigator.clipboard.writeText(input.value).then(() => {
+        document.getElementById('copyBtn').textContent = 'Copied!';
+        setTimeout(() => document.getElementById('copyBtn').textContent = 'Copy', 2000);
+    });
+}
+
+// ─── Boot ───
+initApp();
+</script>
+</body>
+</html>
